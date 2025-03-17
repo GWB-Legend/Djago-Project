@@ -1,0 +1,11 @@
+Create a view to handle trip creation and retrieval in trips/views.py:
+
+python
+Copy
+from rest_framework import generics
+from .models import Trip
+from .serializers import TripSerializer
+
+class TripListCreateView(generics.ListCreateAPIView):
+    queryset = Trip.objects.all()
+    serializer_class = TripSerializer
