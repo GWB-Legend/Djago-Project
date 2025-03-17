@@ -1,0 +1,9 @@
+bash
+Copy
+npx create-react-app eld-logs-frontend
+cd eld-logs-frontend
+Install necessary dependencies:
+
+bash
+Copy
+npm install axios react-router-dom react-leaflet leaflet
