@@ -1,0 +1,255 @@
+1. Backend (Django)**
+
+ `settings.py`
+```python
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+SECRET_KEY = 'your-secret-key-here'
+
+DEBUG = True
+
+ALLOWED_HOSTS = ['*']
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'rest_framework',
+    'trips',
+]
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+ROOT_URLCONF = 'eld_logs_backend.urls'
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = 'eld_logs_backend.wsgi.application'
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+    }
+}
+
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+```
+
+---
+
+ `models.py`
+```python
+from django.db import models
+
+class Trip(models.Model):
+    current_location = models.CharField(max_length=255)
+    pickup_location = models.CharField(max_length=255)
+    dropoff_location = models.CharField(max_length=255)
+    current_cycle_used = models.FloatField()  # in hours
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Trip from {self.pickup_location} to {self.dropoff_location}"
+```
+
+---
+
+ `serializers.py`
+```python
+from rest_framework import serializers
+from .models import Trip
+
+class TripSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Trip
+        fields = '__all__'
+```
+
+---
+
+ `views.py`
+```python
+from rest_framework import generics
+from .models import Trip
+from .serializers import TripSerializer
+
+class TripListCreateView(generics.ListCreateAPIView):
+    queryset = Trip.objects.all()
+    serializer_class = TripSerializer
+```
+
+---
+
+ `urls.py`
+```python
+from django.urls import path
+from .views import TripListCreateView
+
+urlpatterns = [
+    path('api/trips/', TripListCreateView.as_view(), name='trip-list-create'),
+]
+```
+
+---
+
+#### 2. **Frontend (React)**
+
+##### `templates/index.html`
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELD Logs App</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map { height: 400px; width: 100%; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
+```
+
+---
+
+##### `static/js/main.js`
+```javascript
+const root = document.getElementById('root');
+
+const TripForm = ({ onTripSubmit }) => {
+    const [formData, setFormData] = React.useState({
+        currentLocation: '',
+        pickupLocation: '',
+        dropoffLocation: '',
+        currentCycleUsed: 0,
+    });
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const response = await fetch('/api/trips/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+        });
+        const tripData = await response.json();
+        onTripSubmit(tripData);
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <input type="text" placeholder="Current Location" value={formData.currentLocation} onChange={(e) => setFormData({ ...formData, currentLocation: e.target.value })} />
+            <input type="text" placeholder="Pickup Location" value={formData.pickupLocation} onChange={(e) => setFormData({ ...formData, pickupLocation: e.target.value })} />
+            <input type="text" placeholder="Dropoff Location" value={formData.dropoffLocation} onChange={(e) => setFormData({ ...formData, dropoffLocation: e.target.value })} />
+            <input type="number" placeholder="Current Cycle Used (Hrs)" value={formData.currentCycleUsed} onChange={(e) => setFormData({ ...formData, currentCycleUsed: e.target.value })} />
+            <button type="submit">Submit</button>
+        </form>
+    );
+};
+
+const Map = ({ route }) => {
+    React.useEffect(() => {
+        if (route) {
+            const map = L.map('map').setView([37.7749, -122.4194], 10);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            L.polyline(route).addTo(map);
+        }
+    }, [route]);
+
+    return <div id="map"></div>;
+};
+
+const LogSheet = ({ logs }) => {
+    return (
+        <div>
+            <h3>Daily Log Sheet</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Location</th>
+                        <th>Activity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {logs.map((log, index) => (
+                        <tr key={index}>
+                            <td>{log.date}</td>
+                            <td>{log.location}</td>
+                            <td>{log.activity}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+};
+
+const App = () => {
+    const [route, setRoute] = React.useState(null);
+    const [logs, setLogs] = React.useState([]);
+
+    const handleTripSubmit = (tripData) => {
+        // Simulate route calculation
+        const simulatedRoute = [
+            [37.7749, -122.4194], // Current location
+            [34.0522, -118.2437], // Pickup location
+            [36.1699, -115.1398], // Dropoff location
+        ];
+        setRoute(simulatedRoute);
+
+        // Simulate log generation
+        const simulatedLogs = [
+            { date: new Date().toLocaleDateString(), location: tripData.current_location, activity: 'Driving' },
+            { date: new Date().toLocaleDateString(), location: tripData.pickup_location, activity: 'Pickup' },
+            { date: new Date().toLocaleDateString(), location: tripData.dropoff_location, activity: 'Dropoff' },
+        ];
+        setLogs(simulatedLogs);
+    };
+
+    return (
+        <div>
+            <h1>ELD Logs App</h1>
+            <TripForm onTripSubmit={handleTripSubmit} />
+            <Map route={route} />
+            <LogSheet logs={logs} />
+        </div>
+    );
+};
+
+ReactDOM.render(<App />, root);
+```
